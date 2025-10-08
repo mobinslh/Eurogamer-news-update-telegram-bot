@@ -125,8 +125,9 @@ if __name__ == '__main__':
     
     # Test the bot connection
     try:
-        bot_info = bot.get_me()
-        logger.info(f"Bot connected: @{bot_info.username}")
+        # Simple test - try to get chat info
+        bot.get_chat(chat_id=CHAT_ID)
+        logger.info(f"Bot connected successfully")
     except TelegramError as e:
         logger.error(f"Failed to connect to Telegram: {e}")
         exit(1)

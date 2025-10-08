@@ -7,13 +7,13 @@ from telegram import Bot
 import schedule
 
 # Set your Telegram Bot API token and chat ID
-API_TOKEN = 'your_telegram_bot_api_token'  # Replace with your bot's API token
-CHAT_ID = 'your_chat_id'  # Replace with your Telegram chat ID
+API_TOKEN = '8439532920:AAGUhPqG9GS-ilyj1yOiPAYlc21bR7k6Uwg'  # your bot's API token
+CHAT_ID = '484750060'  # your Telegram chat ID
 
 # Create a bot instance
 bot = Bot(token=API_TOKEN)
 
-# Set the timezone for your location (UTC)
+# timezone for your location (UTC)
 TIMEZONE = pytz.UTC
 
 # Store already sent articles' links to avoid duplicates

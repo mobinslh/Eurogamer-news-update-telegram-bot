@@ -2,9 +2,10 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 import time
+import logging
+import asyncio
 from telegram import Bot
 from telegram.error import TelegramError
-import logging
 
 # Set up logging
 logging.basicConfig(
@@ -29,7 +30,7 @@ first_run = True
 def get_new_articles():
     """Scrape Eurogamer /latest page for new articles"""
     try:
-        url = 'https://www.eurogamer.net/latest'  # Use /latest page
+        url = 'https://www.eurogamer.net/latest'
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         }
@@ -88,29 +89,40 @@ def get_new_articles():
         logger.error(traceback.format_exc())
         return []
 
-def send_telegram_message(articles):
-    """Send articles to Telegram"""
+async def send_telegram_message(articles):
+    """Send articles to Telegram (async)"""
     for title, link in articles:
         try:
             message = f"📰 *New Article*\n\n{title}\n\n{link}"
-            bot.send_message(
+            await bot.send_message(
                 chat_id=CHAT_ID, 
                 text=message,
                 parse_mode='Markdown',
                 disable_web_page_preview=False
             )
-            logger.info(f"Sent: {title[:50]}...")
-            time.sleep(1)  # Rate limiting
+            logger.info(f"✓ Sent to Telegram: {title[:50]}...")
+            await asyncio.sleep(1)  # Rate limiting
         except TelegramError as e:
             logger.error(f"Telegram error: {e}")
             # Try without markdown if it fails
             try:
                 message = f"📰 New Article\n\n{title}\n\n{link}"
-                bot.send_message(chat_id=CHAT_ID, text=message)
-            except:
-                logger.error("Failed to send message even without markdown")
+                await bot.send_message(chat_id=CHAT_ID, text=message)
+                logger.info(f"✓ Sent (no markdown): {title[:50]}...")
+            except Exception as e2:
+                logger.error(f"Failed to send message: {e2}")
 
-def job():
+async def test_connection():
+    """Test bot connection"""
+    try:
+        chat = await bot.get_chat(chat_id=CHAT_ID)
+        logger.info(f"Bot connected successfully")
+        return True
+    except TelegramError as e:
+        logger.error(f"Failed to connect to Telegram: {e}")
+        return False
+
+async def job():
     """Main job function"""
     global first_run
     
@@ -124,34 +136,37 @@ def job():
     
     if articles:
         logger.info(f"Found {len(articles)} new articles to send")
-        send_telegram_message(articles)
+        await send_telegram_message(articles)
     else:
         logger.info("No new articles found")
 
-if __name__ == '__main__':
+async def main():
+    """Main loop"""
     logger.info('Starting Eurogamer news scraper for Telegram...')
     logger.info(f'Checking every 5 minutes')
     
     # Test the bot connection
-    try:
-        # Simple test - try to get chat info
-        bot.get_chat(chat_id=CHAT_ID)
-        logger.info(f"Bot connected successfully")
-    except TelegramError as e:
-        logger.error(f"Failed to connect to Telegram: {e}")
-        exit(1)
+    if not await test_connection():
+        logger.error("Cannot connect to Telegram. Exiting.")
+        return
     
     # Run initial check (won't send messages)
-    job()
+    await job()
     
     # Main loop - check every 5 minutes
     while True:
         try:
-            time.sleep(300)  # 5 minutes
-            job()
+            await asyncio.sleep(300)  # 5 minutes
+            await job()
         except KeyboardInterrupt:
             logger.info("Stopping bot...")
             break
         except Exception as e:
             logger.error(f"Error in main loop: {e}")
-            time.sleep(60)  # Wait a minute before retrying
+            await asyncio.sleep(60)  # Wait a minute before retrying
+
+if __name__ == '__main__':
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")

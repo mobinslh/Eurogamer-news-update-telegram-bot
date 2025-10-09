@@ -39,19 +39,39 @@ def get_new_articles():
         soup = BeautifulSoup(response.content, 'html.parser')
         articles = []
         
+        # DEBUG: Save HTML to check structure
+        logger.debug(f"Response status: {response.status_code}")
+        logger.debug(f"Response length: {len(response.content)} bytes")
+        
         # Try multiple selectors as website structure may vary
-        # Looking for article links in common Eurogamer structures
         article_elements = soup.find_all('article')
+        logger.info(f"Found {len(article_elements)} 'article' elements")
         
+        # Try alternative selectors if no articles found
         if not article_elements:
-            logger.warning("No articles found with 'article' tag")
-            return []
+            logger.warning("No 'article' tags found, trying alternatives...")
+            
+            # Eurogamer might use different structures
+            article_elements = soup.find_all('a', {'class': lambda x: x and any(cls in x for cls in ['card', 'article-card', 'news-card', 'featured', 'article-link'])})
+            logger.info(f"Found {len(article_elements)} card/link elements")
+            
+            if not article_elements:
+                # Try finding all links that have images (likely articles)
+                article_elements = soup.find_all('div', {'class': lambda x: x and ('card' in x or 'post' in x or 'article' in x)})
+                logger.info(f"Found {len(article_elements)} div elements with card/post/article classes")
         
-        logger.info(f"Found {len(article_elements)} article elements")
+        # If still nothing, log all links on page for debugging
+        if not article_elements:
+            logger.warning("No articles found with any selector. Logging first 15 links on page:")
+            all_links = soup.find_all('a', href=True)[:15]
+            for i, link in enumerate(all_links):
+                href = link.get('href')
+                text = link.get_text(strip=True)[:50]
+                logger.warning(f"Link {i}: {href} - Text: {text}")
         
         for article in article_elements:
             # Try to find the title and link
-            link_tag = article.find('a', href=True)
+            link_tag = article if article.name == 'a' else article.find('a', href=True)
             
             if link_tag:
                 title_element = link_tag.find(['h2', 'h3', 'h4']) or link_tag
@@ -64,11 +84,18 @@ def get_new_articles():
                 elif not link.startswith('http'):
                     link = 'https://www.eurogamer.net/' + link
                 
+                logger.debug(f"Processing: {title[:50]}... - Link: {link}")
+                
                 # Skip if already sent
                 if link not in sent_articles and title:
                     articles.append((title, link))
                     sent_articles.add(link)
-                    logger.info(f"New article found: {title[:50]}...")
+                    logger.info(f"✓ NEW article found: {title[:50]}...")
+                else:
+                    if link in sent_articles:
+                        logger.debug(f"✗ Already sent: {title[:50]}")
+                    if not title:
+                        logger.debug(f"✗ Empty title for link: {link}")
         
         return articles
         
@@ -77,6 +104,8 @@ def get_new_articles():
         return []
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return []
 
 def send_telegram_message(articles):
